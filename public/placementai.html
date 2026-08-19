@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PlacementAI — Mission Control for Placement Readiness</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0d1017;
+    --bg-alt:#10141c;
+    --panel:#161b25;
+    --panel-2:#1c2230;
+    --line:#262d3b;
+    --text:#e8ecf3;
+    --muted:#8993a8;
+    --muted-2:#5c6478;
+    --signal:#34e0a1;   /* readiness / go */
+    --signal-dim: rgba(52,224,161,0.12);
+    --amber:#f5a623;    /* attention / gap */
+    --amber-dim: rgba(245,166,35,0.12);
+    --red:#ef5b5b;
+    --red-dim: rgba(239,91,91,0.12);
+    --blue:#5b8def;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;}
+  ::selection{background:var(--signal);color:#0d1017;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .disp{font-family:'Space Grotesk',sans-serif;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+
+  /* ---------- LOGIN ---------- */
+  #login-screen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column;
+    background:
+      radial-gradient(circle at 20% 20%, rgba(52,224,161,0.06), transparent 40%),
+      radial-gradient(circle at 80% 70%, rgba(245,166,35,0.05), transparent 40%),
+      var(--bg);
+    padding:24px;
+  }
+  .brand-mark{display:flex;align-items:center;gap:10px;margin-bottom:36px;}
+  .brand-dot{width:10px;height:10px;border-radius:50%;background:var(--signal);box-shadow:0 0 12px var(--signal);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+  .login-card{
+    width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:32px;
+  }
+  .login-title{font-size:22px;font-weight:600;margin:0 0 6px;}
+  .login-sub{color:var(--muted);font-size:13px;margin:0 0 24px;line-height:1.5;}
+  .field{margin-bottom:14px;}
+  .field label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+  .field input{
+    width:100%;background:var(--bg-alt);border:1px solid var(--line);border-radius:8px;
+    padding:11px 12px;color:var(--text);font-size:14px;outline:none;
+  }
+  .field input:focus{border-color:var(--signal);}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    border-radius:8px;padding:11px 18px;font-size:13.5px;font-weight:600;cursor:pointer;
+    border:1px solid transparent;transition:.15s;
+  }
+  .btn-primary{background:var(--signal);color:#08130f;width:100%;}
+  .btn-primary:hover{filter:brightness(1.08);}
+  .btn-ghost{background:transparent;border:1px solid var(--line);color:var(--text);width:100%;margin-top:10px;}
+  .btn-ghost:hover{border-color:var(--muted-2);}
+  .demo-tag{
+    display:inline-block;font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    background:var(--amber-dim);color:var(--amber);padding:3px 8px;border-radius:100px;border:1px solid rgba(245,166,35,0.35);
+  }
+
+  /* ---------- APP SHELL ---------- */
+  #app{display:none;min-height:100vh;grid-template-columns:230px 1fr;}
+  #app.active{display:grid;}
+  #sidebar{
+    background:var(--bg-alt);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto;
+  }
+  .side-brand{display:flex;align-items:center;gap:8px;padding:6px 8px 18px;}
+  .side-brand .brand-dot{width:8px;height:8px;}
+  .side-brand span{font-family:'Space Grotesk';font-weight:700;font-size:15px;}
+  .nav-group{margin-bottom:4px;}
+  .nav-item{
+    display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;
+    color:var(--muted);font-size:13.5px;cursor:pointer;margin-bottom:2px;font-weight:500;
+  }
+  .nav-item:hover{background:var(--panel);color:var(--text);}
+  .nav-item.active{background:var(--signal-dim);color:var(--signal);}
+  .nav-icon{width:16px;text-align:center;font-size:14px;flex-shrink:0;}
+  .side-foot{margin-top:auto;padding:12px 10px 4px;border-top:1px solid var(--line);}
+  .side-foot .who{font-size:12.5px;font-weight:600;}
+  .side-foot .role{font-size:11px;color:var(--muted);}
+
+  #main{padding:26px 34px 60px;overflow-x:hidden;max-width:1180px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px;}
+  .page-eyebrow{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);margin:0 0 4px;}
+  .page-title{font-family:'Space Grotesk';font-size:24px;font-weight:600;margin:0;}
+  .topbar-right{display:flex;align-items:center;gap:14px;}
+  .bell{position:relative;color:var(--muted);cursor:pointer;font-size:16px;}
+  .bell .dot{position:absolute;top:-2px;right:-2px;width:7px;height:7px;background:var(--amber);border-radius:50%;}
+
+  .grid{display:grid;gap:16px;}
+  .g2{grid-template-columns:1fr 1fr;}
+  .g3{grid-template-columns:repeat(3,1fr);}
+  .g4{grid-template-columns:repeat(4,1fr);}
+  @media(max-width:900px){.g2,.g3,.g4{grid-template-columns:1fr;}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;}
+  .card-title{font-size:13px;font-weight:600;color:var(--text);margin:0 0 4px;}
+  .card-sub{font-size:11.5px;color:var(--muted);margin:0 0 14px;}
+  .stat-num{font-family:'IBM Plex Mono';font-size:28px;font-weight:600;}
+  .stat-label{font-size:11.5px;color:var(--muted);margin-top:2px;}
+  .up{color:var(--signal);} .down{color:var(--red);}
+  .pill{font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:100px;letter-spacing:.03em;}
+  .pill-strong{background:var(--signal-dim);color:var(--signal);}
+  .pill-mid{background:var(--amber-dim);color:var(--amber);}
+  .pill-weak{background:var(--red-dim);color:var(--red);}
+  .pill-demo{background:rgba(91,141,239,0.12);color:var(--blue);}
+
+  .bar-track{height:6px;background:var(--panel-2);border-radius:100px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:100px;background:var(--signal);}
+
+  .readiness-wrap{display:flex;align-items:center;gap:22px;}
+  .gauge{position:relative;width:150px;height:150px;flex-shrink:0;}
+  .gauge svg{transform:rotate(-90deg);}
+  .gauge-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+  .gauge-num{font-family:'IBM Plex Mono';font-size:30px;font-weight:600;}
+  .gauge-sub{font-size:10px;color:var(--muted);letter-spacing:.05em;text-transform:uppercase;}
+
+  .skill-row{display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line);}
+  .skill-row:last-child{border-bottom:none;}
+  .skill-name{font-size:13.5px;font-weight:500;}
+  .skill-meta{font-size:11px;color:var(--muted);}
+
+  table{width:100%;border-collapse:collapse;}
+  th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted-2);padding:8px 10px;border-bottom:1px solid var(--line);}
+  td{padding:11px 10px;font-size:13px;border-bottom:1px solid var(--line);}
+  tr:last-child td{border-bottom:none;}
+
+  .tag{font-size:10.5px;background:var(--panel-2);color:var(--muted);padding:3px 8px;border-radius:6px;margin-right:4px;display:inline-block;}
+  .btn-sm{padding:6px 12px;font-size:12px;border-radius:7px;font-weight:600;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--text);}
+  .btn-sm:hover{border-color:var(--muted-2);}
+  .btn-sm.on{background:var(--signal-dim);color:var(--signal);border-color:transparent;}
+  .btn-sm.amber{background:var(--amber-dim);color:var(--amber);border-color:transparent;}
+
+  .roadmap-week{border-left:2px solid var(--line);padding:0 0 22px 20px;position:relative;}
+  .roadmap-week:last-child{padding-bottom:0;}
+  .roadmap-dot{position:absolute;left:-7px;top:0;width:12px;height:12px;border-radius:50%;background:var(--panel-2);border:2px solid var(--line);}
+  .roadmap-dot.done{background:var(--signal);border-color:var(--signal);}
+  .roadmap-dot.active{background:var(--amber);border-color:var(--amber);}
+  .task-item{display:flex;justify-content:space-between;align-items:center;padding:8px 0;font-size:12.5px;color:var(--muted);}
+
+  .prob-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer;}
+  .prob-card:hover{border-color:var(--muted-2);}
+  .diff-easy{color:var(--signal);} .diff-med{color:var(--amber);} .diff-hard{color:var(--red);}
+
+  .chat-window{background:var(--bg-alt);border:1px solid var(--line);border-radius:12px;height:460px;display:flex;flex-direction:column;}
+  .chat-msgs{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:12px;}
+  .msg{max-width:78%;padding:10px 13px;border-radius:10px;font-size:13.5px;line-height:1.5;}
+  .msg.ai{background:var(--panel);align-self:flex-start;border:1px solid var(--line);}
+  .msg.user{background:var(--signal-dim);color:var(--signal);align-self:flex-end;}
+  .chat-input-row{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line);}
+  .chat-input-row input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 12px;color:var(--text);font-size:13px;outline:none;}
+  .chat-input-row input:focus{border-color:var(--signal);}
+
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(6,8,12,0.7);z-index:50;align-items:center;justify-content:center;padding:20px;}
+  .modal-bg.active{display:flex;}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:14px;max-width:640px;width:100%;max-height:85vh;overflow-y:auto;padding:26px;}
+  .modal-close{float:right;cursor:pointer;color:var(--muted);font-size:18px;}
+
+  .page{display:none;}
+  .page.active{display:block;animation:fade .25s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  .connect-card{display:flex;align-items:center;justify-content:space-between;padding:16px 18px;}
+  .drop-zone{border:1.5px dashed var(--line);border-radius:12px;padding:40px 20px;text-align:center;color:var(--muted);cursor:pointer;}
+  .drop-zone:hover{border-color:var(--signal);color:var(--text);}
+
+  .notif-item{display:flex;gap:10px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px;}
+  .notif-item:last-child{border-bottom:none;}
+  .notif-time{color:var(--muted-2);font-size:11px;margin-top:2px;}
+
+  .toast{position:fixed;bottom:22px;right:22px;background:var(--panel);border:1px solid var(--signal);color:var(--text);
+    padding:12px 18px;border-radius:10px;font-size:13px;z-index:80;box-shadow:0 8px 30px rgba(0,0,0,.4);
+    display:flex;align-items:center;gap:8px;transform:translateY(20px);opacity:0;transition:.25s;}
+  .toast.show{transform:translateY(0);opacity:1;}
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="login-screen">
+  <div class="brand-mark">
+    <div class="brand-dot"></div>
+    <span class="disp" style="font-size:19px;font-weight:700;">PlacementAI</span>
+  </div>
+  <div class="login-card">
+    <p class="demo-tag" style="margin-bottom:14px;">Prototype · Demo/Sandbox Data</p>
+    <h1 class="login-title disp">Placement readiness console</h1>
+    <p class="login-sub">Sign in to track skills, close gaps, and get AI-guided prep for your target role. No real accounts are created in this prototype.</p>
+    <div class="field"><label>Email</label><input id="li-email" type="text" placeholder="you@college.edu"></div>
+    <div class="field"><label>Password</label><input id="li-pass" type="password" placeholder="••••••••"></div>
+    <button class="btn btn-primary" onclick="loginNormal()">Sign in</button>
+    <button class="btn btn-ghost" onclick="launchDemo()">🚀 Launch Demo — explore as Demo Student</button>
+    <p style="font-size:11px;color:var(--muted-2);margin-top:16px;text-align:center;line-height:1.5;">
+      Demo mode loads a complete seeded profile — no signup, no API keys required.
+    </p>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="app">
+  <aside id="sidebar">
+    <div class="side-brand"><div class="brand-dot"></div><span class="disp">PlacementAI</span></div>
+    <div class="nav-group" id="nav-container"></div>
+    <div class="side-foot">
+      <div class="who" id="side-name">Demo Student</div>
+      <div class="role">Target: <span id="side-role">Software Developer</span></div>
+      <div class="nav-item" style="margin-top:10px;padding-left:0;" onclick="logout()"><span class="nav-icon">⎋</span> Sign out</div>
+    </div>
+  </aside>
+
+  <main id="main">
+    <div class="topbar">
+      <div>
+        <p class="page-eyebrow mono" id="page-eyebrow">MODULE</p>
+        <h1 class="page-title" id="page-title">Dashboard</h1>
+      </div>
+      <div class="topbar-right">
+        <div class="bell" onclick="openModal('notif-modal')">🔔<div class="dot"></div></div>
+        <span class="pill pill-demo mono">DEMO MODE</span>
+      </div>
+    </div>
+
+    <div id="page-root"></div>
+  </main>
+</div>
+
+<!-- ============ NOTIFICATIONS MODAL ============ -->
+<div class="modal-bg" id="notif-modal">
+  <div class="modal">
+    <span class="modal-close" onclick="closeModal('notif-modal')">✕</span>
+    <h3 class="disp" style="margin-top:0;">Notifications</h3>
+    <div id="notif-list"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   DATA LAYER — seeded demo / sandbox data
+   ========================================================= */
+const state = {
+  loggedIn:false,
+  page:'dashboard',
+  student:{
+    name:'Demo Student', college:'Sri Venkateswara College of Engineering', dept:'Information Technology',
+    year:'3rd Year', cgpa:8.2, role:'Software Developer', readiness:78, prevReadiness:72,
+    streak:9, weeklyGoal:70
+  },
+  skills:[
+    {name:'Programming (C/C++)', score:90, level:'Strong', trend:+4, evidence:'42 problems solved · 3 assessments', action:'Move to advanced DP patterns'},
+    {name:'Data Structures & Algo', score:82, level:'Strong', trend:+6, evidence:'Graph & tree topics cleared', action:'Practice weighted graph problems'},
+    {name:'DBMS', score:58, level:'Needs Improvement', trend:-2, evidence:'Normalization quiz: 58%', action:'Revise 3NF/BCNF, then retake assessment'},
+    {name:'Development (Web)', score:71, level:'Developing', trend:+3, evidence:'2 React projects on GitHub', action:'Add a REST API project'},
+    {name:'Git/GitHub', score:76, level:'Developing', trend:+1, evidence:'8 repos · 140 contributions', action:'Improve README documentation'},
+    {name:'Aptitude', score:70, level:'Developing', trend:0, evidence:'Quant & logical reasoning mocks', action:'Timed practice sets, 20 min/day'},
+    {name:'Communication', score:68, level:'Developing', trend:+2, evidence:'HR mock interview transcript', action:'Practice structured STAR answers'},
+    {name:'Projects', score:80, level:'Strong', trend:+5, evidence:'3 shipped projects', action:'Add deployment + demo video'},
+    {name:'Interview Skills', score:74, level:'Developing', trend:+3, evidence:'2 mock interviews completed', action:'Do 1 DSA mock interview this week'},
+  ],
+  readinessBreakdown:[
+    {label:'Technical Skills', val:82},{label:'Coding Ability', val:85},{label:'Projects', val:74},
+    {label:'Resume', val:81},{label:'Aptitude', val:70},{label:'Communication', val:68},{label:'Interview', val:76}
+  ],
+  skillGap:{
+    strengths:['C++ & Problem Solving','GitHub activity','SQL fundamentals','Project delivery'],
+    weaknesses:['Dynamic Programming','DBMS normalization & transactions','System Design basics'],
+    missing:['REST API design','Unit testing','System design fundamentals'],
+    priority:[
+      {level:'HIGH', skill:'Dynamic Programming'},
+      {level:'HIGH', skill:'DBMS — Normalization & Transactions'},
+      {level:'MEDIUM', skill:'REST API design'},
+      {level:'LOW', skill:'System Design'}
+    ]
+  },
+  roadmap:[
+    {week:1,title:'Arrays + Strings',status:'done',progress:100,tasks:['Solve 10 array problems (Easy→Medium)','Revise sliding window & two-pointer','Mini assessment: Arrays']},
+    {week:2,title:'Linked Lists + Stacks',status:'active',progress:60,tasks:['Reverse & merge linked list problems','Stack-based expression evaluation','Mini assessment: Linked Lists']},
+    {week:3,title:'DBMS — Normalization & Trees',status:'todo',progress:0,tasks:['3NF/BCNF walkthrough','Binary tree traversal problems','DBMS assessment retake']},
+    {week:4,title:'Graphs (locked)',status:'locked',progress:0,tasks:['BFS/DFS fundamentals','Weighted graph problems','Graph assessment']},
+  ],
+  problems:[
+    {id:1,title:'Two Sum',topic:'Arrays',diff:'Easy',desc:'Return indices of two numbers that add up to target.'},
+    {id:2,title:'Longest Substring Without Repeats',topic:'Strings',diff:'Medium',desc:'Find length of the longest substring without repeating characters.'},
+    {id:3,title:'Reverse Linked List',topic:'Linked Lists',diff:'Easy',desc:'Reverse a singly linked list in place.'},
+    {id:4,title:'Detect Cycle in Linked List',topic:'Linked Lists',diff:'Medium',desc:'Determine if a linked list has a cycle using the fast-and-slow pointer technique.'},
+    {id:5,title:'Binary Tree Level Order',topic:'Trees',diff:'Medium',desc:'Return level-order traversal of a binary tree.'},
+    {id:6,title:'Validate BST',topic:'Trees',diff:'Medium',desc:'Check if a binary tree is a valid binary search tree.'},
+    {id:7,title:'Course Schedule (Topo Sort)',topic:'Graphs',diff:'Hard',desc:'Determine if you can finish all courses given prerequisites.'},
+    {id:8,title:'Number of Islands',topic:'Graphs',diff:'Medium',desc:'Count islands in a 2D grid using BFS/DFS.'},
+    {id:9,title:'Longest Common Subsequence',topic:'Dynamic Programming',diff:'Medium',desc:'Find LCS length of two strings.'},
+    {id:10,title:'0/1 Knapsack',topic:'Dynamic Programming',diff:'Hard',desc:'Maximize value within weight capacity.'},
+    {id:11,title:'Merge Sort Implementation',topic:'Sorting',diff:'Easy',desc:'Implement merge sort from scratch.'},
+    {id:12,title:'Binary Search Rotated Array',topic:'Searching',diff:'Medium',desc:'Search a target in a rotated sorted array.'},
+    {id:13,title:'SQL: Second Highest Salary',topic:'SQL',diff:'Medium',desc:'Write a query to find the second-highest salary.'},
+    {id:14,title:'SQL: Department Aggregates',topic:'SQL',diff:'Easy',desc:'Group employees by department with count & avg salary.'},
+  ],
+  platforms:[
+    {name:'HackerRank', status:'Demo Connected', synced:'2 hours ago', stats:{'Problems Solved':142,'Easy':70,'Medium':52,'Hard':20,'Score':'4,120'}},
+    {name:'LeetCode', status:'Demo Connected', synced:'2 hours ago', stats:{'Problems Solved':186,'Easy':88,'Medium':79,'Hard':19,'Contest Rating':1542}},
+    {name:'CodeChef', status:'Demo Connected', synced:'1 day ago', stats:{'Rating':1687,'Problems Solved':64,'Contests':11}},
+    {name:'GitHub', status:'Demo Connected', synced:'3 hours ago', stats:{'Repositories':8,'Contributions':140,'Stars':23,'Languages':'C++, JS, Python'}},
+  ],
+  githubProjects:[
+    {name:'campus-connect', desc:'Full-stack student networking app', quality:82, breakdown:{'Code Quality':80,'Documentation':64,'Tech Usage':88,'Activity':85,'Complexity':78},
+      recs:['Add API documentation','Improve README with screenshots','Add automated tests']},
+    {name:'dsa-visualizer', desc:'React visualizer for sorting & graph algorithms', quality:75, breakdown:{'Code Quality':78,'Documentation':58,'Tech Usage':82,'Activity':70,'Complexity':72},
+      recs:['Add deployment instructions','Write unit tests for algorithms']},
+  ],
+  opportunities:[
+    {title:'SDE Intern', org:'Zoho Corporation', type:'Internship', match:92, skills:['DSA','C++','SQL'], deadline:'2026-09-05', loc:'Chennai / Remote'},
+    {title:'Full Stack Developer Intern', org:'Freshworks', type:'Internship', match:85, skills:['React','Node.js','REST API'], deadline:'2026-09-12', loc:'Chennai'},
+    {title:'SIH 2026 — Grand Finale', org:'AICTE / MoE', type:'Hackathon', match:88, skills:['AI/ML','Web','Problem Solving'], deadline:'2026-09-20', loc:'Pan-India'},
+    {title:'CodeChef Starters 150', org:'CodeChef', type:'Coding Contest', match:79, skills:['DSA','Competitive Programming'], deadline:'2026-08-24', loc:'Online'},
+    {title:'Data Analyst Intern', org:'Ather Energy', type:'Internship', match:64, skills:['SQL','Python','Statistics'], deadline:'2026-09-02', loc:'Bengaluru'},
+    {title:'GSoC-style Open Source Sprint', org:'DevFest Chennai', type:'Open Source', match:73, skills:['Git/GitHub','Documentation'], deadline:'2026-09-15', loc:'Remote'},
+  ],
+  sihStatements:[
+    {id:'SIH1531',title:'AI-based Crop Disease Detection', cat:'Agriculture', match:64},
+    {id:'SIH1548',title:'Smart Traffic Management using IoT', cat:'Smart Cities', match:58},
+    {id:'SIH1562',title:'Placement & Skill Readiness Platform', cat:'Education', match:96},
+    {id:'SIH1577',title:'Secure e-Voting using Blockchain', cat:'Cybersecurity', match:52},
+    {id:'SIH1590',title:'AI Chatbot for Rural Healthcare Access', cat:'Healthcare', match:61},
+    {id:'SIH1603',title:'Personalized Learning Recommender', cat:'Education', match:88},
+  ],
+  resources:[
+    {title:'Normalization Deep Dive (1NF→BCNF)', topic:'DBMS', diff:'Intermediate', time:'45 min', rating:4.7, relevance:96},
+    {title:'Dynamic Programming Patterns', topic:'DSA', diff:'Advanced', time:'2 hr', rating:4.8, relevance:94},
+    {title:'REST API Design Fundamentals', topic:'Web Development', diff:'Beginner', time:'50 min', rating:4.5, relevance:82},
+    {title:'System Design for Freshers', topic:'DSA', diff:'Intermediate', time:'1.5 hr', rating:4.6, relevance:70},
+    {title:'STAR Method for HR Interviews', topic:'Communication', diff:'Beginner', time:'20 min', rating:4.4, relevance:74},
+    {title:'Git Branching Strategies', topic:'OOP', diff:'Beginner', time:'25 min', rating:4.3, relevance:60},
+  ],
+  bookmarks:new Set(),
+  notifications:[
+    {icon:'🎯', text:'Your placement readiness increased from 72 to 78.', time:'2 hours ago'},
+    {icon:'🔔', text:'Your DBMS assessment is ready.', time:'5 hours ago'},
+    {icon:'📌', text:'Roadmap updated based on your latest assessment.', time:'Yesterday'},
+    {icon:'🕐', text:'Zoho SDE Intern deadline in 17 days.', time:'Yesterday'},
+    {icon:'📢', text:'SIH 2026 problem statements are now live.', time:'2 days ago'},
+  ],
+  weekly:{solved:24, hours:8.5, improved:[{s:'DSA',v:6},{s:'SQL',v:8}], weak:['Communication','Dynamic Programming'],
+    priority:['DBMS — Normalization','Dynamic Programming','1 Mock Interview']},
+  chat:[{who:'ai', text:"Hi Demo Student 👋 I'm PlacementAI, your personal placement coach. Ask me what to learn today, why a skill score looks the way it does, or which role fits you best."}],
+  interview:{active:false, type:null, qIndex:0, answers:[]},
+};
+
+const interviewBank = {
+  'DSA Interview':[
+    'Explain the difference between an array and a linked list, and when you would use each.',
+    'How would you detect a cycle in a linked list? Walk me through your approach.',
+    'What is the time complexity of your Two Sum solution, and can you improve it?'
+  ],
+  'DBMS Interview':[
+    'What is database normalization and why is 3NF important?',
+    'Explain the difference between DELETE, TRUNCATE, and DROP.',
+    'How would you design a schema for an e-commerce order system?'
+  ],
+  'HR Interview':[
+    'Tell me about yourself and why you want this role.',
+    'Describe a time you faced conflict in a team project and how you resolved it.',
+    'Where do you see yourself in three years?'
+  ],
+  'Behavioral Interview':[
+    'Describe a situation where you had to learn something quickly under pressure.',
+    'Tell me about a time you failed at something. What did you learn?',
+    'How do you prioritize tasks when everything feels urgent?'
+  ],
+  'Project Interview':[
+    'Walk me through the architecture of your most complex project.',
+    'What was the hardest technical bug you fixed in this project, and how?',
+    'If you had another month, what would you improve about this project?'
+  ],
+  'Technical Interview':[
+    'Explain REST API design principles you followed in your last project.',
+    'What is the difference between SQL and NoSQL databases, and when to use each?',
+    'How does garbage collection differ in Java vs manual memory management in C?'
+  ],
+};
+
+/* =========================================================
+   NAV CONFIG
+   ========================================================= */
+const NAV = [
+  {id:'dashboard', label:'Dashboard', icon:'◈'},
+  {id:'skills', label:'My Skills', icon:'◎'},
+  {id:'roadmap', label:'AI Roadmap', icon:'⇢'},
+  {id:'practice', label:'Coding Practice', icon:'⌨'},
+  {id:'integrations', label:'Integrations', icon:'⇄'},
+  {id:'github', label:'GitHub Projects', icon:'⌥'},
+  {id:'resume', label:'Resume Analyzer', icon:'▤'},
+  {id:'interview', label:'Mock Interview', icon:'◐'},
+  {id:'coach', label:'AI Career Coach', icon:'✦'},
+  {id:'opportunities', label:'Opportunities', icon:'⌘'},
+  {id:'sih', label:'SIH Hub', icon:'▲'},
+  {id:'resources', label:'Resource Hub', icon:'▥'},
+  {id:'feedback', label:'My Feedback', icon:'✎'},
+  {id:'weekly', label:'Weekly Report', icon:'▦'},
+  {id:'settings', label:'Settings', icon:'⚙'},
+];
+
+/* =========================================================
+   INIT
+   ========================================================= */
+function renderNav(){
+  document.getElementById('nav-container').innerHTML = NAV.map(n=>`
+    <div class="nav-item ${state.page===n.id?'active':''}" onclick="goTo('${n.id}')">
+      <span class="nav-icon">${n.icon}</span>${n.label}
+    </div>`).join('');
+}
+
+function loginNormal(){
+  const email = document.getElementById('li-email').value.trim();
+  if(!email){ showToast('Enter an email, or tap Launch Demo to explore instantly.'); return; }
+  launchDemo();
+}
+function launchDemo(){
+  state.loggedIn = true;
+  document.getElementById('login-screen').style.display='none';
+  document.getElementById('app').classList.add('active');
+  document.getElementById('side-name').textContent = state.student.name;
+  document.getElementById('side-role').textContent = state.student.role;
+  renderNav();
+  goTo('dashboard');
+  showToast('Demo profile loaded — Demo/Sandbox Data');
+}
+function logout(){
+  state.loggedIn=false;
+  document.getElementById('login-screen').style.display='flex';
+  document.getElementById('app').classList.remove('active');
+}
+function goTo(id){
+  state.page=id;
+  renderNav();
+  const eyebrowMap = {dashboard:'OVERVIEW', skills:'SKILL DNA', roadmap:'ADAPTIVE PLAN', practice:'PRACTICE ARENA',
+    integrations:'CONNECTORS', github:'PROJECT ANALYSIS', resume:'AI ANALYZER', interview:'SIMULATION',
+    coach:'ASSISTANT', opportunities:'MATCHING ENGINE', sih:'HACKATHON', resources:'LIBRARY', feedback:'FEEDBACK LOOP',
+    weekly:'AI REPORT', settings:'ACCOUNT'};
+  document.getElementById('page-eyebrow').textContent = eyebrowMap[id]||'';
+  document.getElementById('page-title').textContent = NAV.find(n=>n.id===id).label;
+  document.getElementById('page-root').innerHTML = renderPage(id);
+  if(id==='skills') setTimeout(drawRadar,30);
+  if(id==='interview') setTimeout(renderInterview,10);
+  window.scrollTo(0,0);
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(()=>t.classList.remove('show'), 2600);
+}
+function openModal(id){ document.getElementById(id).classList.add('active'); if(id==='notif-modal') renderNotifs(); }
+function closeModal(id){ document.getElementById(id).classList.remove('active'); }
+function renderNotifs(){
+  document.getElementById('notif-list').innerHTML = state.notifications.map(n=>`
+    <div class="notif-item"><div>${n.icon}</div><div><div>${n.text}</div><div class="notif-time">${n.time}</div></div></div>
+  `).join('');
+}
+
+/* =========================================================
+   GAUGE (SVG ring)
+   ========================================================= */
+function gaugeSVG(val, size=150, stroke=12, color='var(--signal)'){
+  const r = (size-stroke)/2, c = 2*Math.PI*r, off = c - (val/100)*c;
+  return `<svg width="${size}" height="${size}">
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="#232a38" stroke-width="${stroke}" fill="none"/>
+    <circle cx="${size/2}" cy="${size/2}" r="${r}" stroke="${color}" stroke-width="${stroke}" fill="none"
+      stroke-dasharray="${c}" stroke-dashoffset="${off}" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/* =========================================================
+   PAGE RENDERERS
+   ========================================================= */
+function renderPage(id){
+  switch(id){
+    case 'dashboard': return pageDashboard();
+    case 'skills': return pageSkills();
+    case 'roadmap': return pageRoadmap();
+    case 'practice': return pagePractice();
+    case 'integrations': return pageIntegrations();
+    case 'github': return pageGithub();
+    case 'resume': return pageResume();
+    case 'interview': return pageInterview();
+    case 'coach': return pageCoach();
+    case 'opportunities': return pageOpportunities();
+    case 'sih': return pageSIH();
+    case 'resources': return pageResources();
+    case 'feedback': return pageFeedback();
+    case 'weekly': return pageWeekly();
+    case 'settings': return pageSettings();
+    default: return '';
+  }
+}
+
+function pageDashboard(){
+  const s = state.student;
+  const delta = s.readiness - s.prevReadiness;
+  return `
+  <p style="color:var(--muted);font-size:14px;margin-top:0;">Good morning, <strong style="color:var(--text);">${s.name}</strong> 👋 — here's where you stand today.</p>
+  <div class="grid g2" style="margin-bottom:16px;">
+    <div class="card">
+      <p class="card-title">Placement Readiness</p>
+      <p class="card-sub">Weighted across technical, coding, projects, resume, aptitude, communication & interview</p>
+      <div class="readiness-wrap">
+        <div class="gauge">${gaugeSVG(s.readiness)}
+          <div class="gauge-center"><div class="gauge-num">${s.readiness}</div><div class="gauge-sub">/ 100</div></div>
+        </div>
+        <div>
+          <div class="pill pill-strong mono" style="margin-bottom:8px;">▲ +${delta} vs last week</div>
+          <div class="skill-meta">Streak: <strong style="color:var(--text);">${s.streak} days</strong></div>
+          <div class="skill-meta">Weekly goal: <strong style="color:var(--text);">${s.weeklyGoal}% complete</strong></div>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <p class="card-title">Why is my score ${s.readiness}?</p>
+      <p class="card-sub">AI-generated explanation</p>
+      <p style="font-size:13.5px;line-height:1.6;color:var(--text);">Your coding and programming skills are strong (85–90%), and projects are solid at 74%. Your readiness is currently
+      capped mainly by <strong style="color:var(--amber)">DBMS (58%)</strong> and <strong style="color:var(--amber)">communication (68%)</strong>.
+      Closing the DBMS gap alone could lift your score by an estimated 4–6 points.</p>
+      <button class="btn-sm on" style="margin-top:6px;" onclick="goTo('roadmap')">View recommended plan →</button>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-bottom:16px;">
+    ${statCard('DSA Score','82%','+6% this month','up')}
+    ${statCard('Problems Solved (7d)','24','vs 18 last week','up')}
+    ${statCard('Resume Score','81/100','ATS-friendly','up')}
+    ${statCard('DBMS Score','58%','-2% — needs focus','down')}
+  </div>
+  <div class="card">
+    <p class="card-title">This week's priority queue</p>
+    <p class="card-sub">Generated from your latest skill-gap analysis</p>
+    <table>
+      <tr><th>Priority</th><th>Focus Area</th><th>Action</th></tr>
+      ${state.skillGap.priority.map(p=>`<tr><td><span class="pill ${p.level==='HIGH'?'pill-weak':p.level==='MEDIUM'?'pill-mid':'pill-strong'}">${p.level}</span></td><td>${p.skill}</td><td style="color:var(--muted);">${p.level==='HIGH'?'Start this week':'Queued in roadmap'}</td></tr>`).join('')}
+    </table>
+  </div>`;
+}
+function statCard(label,val,sub,dir){
+  return `<div class="card"><p class="card-sub" style="margin-bottom:8px;">${label}</p>
+    <div class="stat-num">${val}</div><div class="stat-label ${dir}">${dir==='up'?'▲':'▼'} ${sub}</div></div>`;
+}
+
+function pageSkills(){
+  return `
+  <div class="grid g2">
+    <div class="card">
+      <p class="card-title">Skill DNA</p>
+      <p class="card-sub">Composite radar across nine readiness dimensions</p>
+      <canvas id="radar-canvas" height="260"></canvas>
+    </div>
+    <div class="card">
+      <p class="card-title">Readiness breakdown</p>
+      <p class="card-sub">Component scores feeding your overall score</p>
+      ${state.readinessBreakdown.map(b=>`
+        <div style="margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:5px;">
+            <span>${b.label}</span><span class="mono">${b.val}</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill" style="width:${b.val}%; background:${b.val<65?'var(--amber)':'var(--signal)'}"></div></div>
+        </div>`).join('')}
+    </div>
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <p class="card-title">Skill cards</p>
+    <p class="card-sub">Score, trend, evidence & recommended next action</p>
+    ${state.skills.map(sk=>`
+      <div class="skill-row">
+        <div style="flex:1;">
+          <div class="skill-name">${sk.name} <span class="pill ${sk.level==='Strong'?'pill-strong':sk.level==='Developing'?'pill-mid':'pill-weak'}" style="margin-left:6px;">${sk.level}</span></div>
+          <div class="skill-meta">${sk.evidence} · next: ${sk.action}</div>
+        </div>
+        <div style="text-align:right;min-width:80px;">
+          <div class="mono" style="font-size:16px;font-weight:600;">${sk.score}%</div>
+          <div class="skill-meta ${sk.trend>0?'up':sk.trend<0?'down':''}">${sk.trend>0?'▲':sk.trend<0?'▼':'–'} ${Math.abs(sk.trend)}%</div>
+        </div>
+      </div>`).join('')}
+  </div>
+  <div class="card" style="margin-top:16px;">
+    <p class="card-title">AI Skill Gap Analyzer</p>
+    <div class="grid g3">
+      <div><p class="skill-meta" style="text-transform:uppercase;letter-spacing:.05em;">Strengths</p>
+        ${state.skillGap.strengths.map(x=>`<div style="font-size:13px;margin-bottom:6px;">✓ ${x}</div>`).join('')}</div>
+      <div><p class="skill-meta" style="text-transform:uppercase;letter-spacing:.05em;">Weaknesses</p>
+        ${state.skillGap.weaknesses.map(x=>`<div style="font-size:13px;margin-bottom:6px;color:var(--amber);">▲ ${x}</div>`).join('')}</div>
+      <div><p class="skill-meta" style="text-transform:uppercase;letter-spacing:.05em;">Missing Skills</p>
+        ${state.skillGap.missing.map(x=>`<div style="font-size:13px;margin-bottom:6px;color:var(--red);">✕ ${x}</div>`).join('')}</div>
+    </div>
+  </div>`;
+}
+function drawRadar(){
+  const ctx = document.getElementById('radar-canvas');
+  if(!ctx || window._radarChart){ if(window._radarChart){window._radarChart.destroy(); window._radarChart=null;} }
+  window._radarChart = new Chart(ctx, {
+    type:'radar',
+    data:{
+      labels: state.skills.map(s=>s.name.split(' (')[0]),
+      datasets:[{ label:'Score', data: state.skills.map(s=>s.score),
+        backgroundColor:'rgba(52,224,161,0.15)', borderColor:'#34e0a1', pointBackgroundColor:'#34e0a1' }]
+    },
+    options:{
+      plugins:{legend:{display:false}},
+      scales:{ r:{ min:0, max:100, ticks:{display:false, backdropColor:'transparent'},
+        grid:{color:'#232a38'}, angleLines:{color:'#232a38'},
+        pointLabels:{color:'#8993a8', font:{size:10}} } }
+    }
+  });
+}
+
+function pageRoadmap(){
+  return `
+  <div class="card" style="margin-bottom:16px;">
+    <p class="card-title">Your Personalized Placement Roadmap</p>
+    <p class="card-sub">Adapted from your skill gaps for <strong>${state.student.role}</strong>. Updated automatically after each assessment.</p>
+    <div class="pill pill-mid mono">↻ Roadmap updated based on your latest DBMS assessment</div>
+  </div>
+  <div class="card">
+    ${state.roadmap.map(w=>`
+      <div class="roadmap-week">
+        <div class="roadmap-dot ${w.status}"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-weight:600;font-size:14px;">Week ${w.week} — ${w.title}</div>
+            <div class="skill-meta">${w.status==='locked'?'Locked until Week 3 completes':w.status==='done'?'Completed':w.status==='active'?'In progress':'Not started'}</div>
+          </div>
+          <div style="text-align:right;min-width:110px;">
+            <div class="mono" style="font-size:13px;">${w.progress}%</div>
+            <div class="bar-track" style="width:100px;margin-top:4px;"><div class="bar-fill" style="width:${w.progress}%; background:${w.status==='locked'?'var(--muted-2)':'var(--signal)'}"></div></div>
+          </div>
+        </div>
+        <div style="margin-top:8px;">
+          ${w.tasks.map((t,i)=>`
+            <div class="task-item">
+              <span>${w.status==='locked'?'🔒':'•'} ${t}</span>
+              ${w.status!=='locked' ? `<button class="btn-sm ${w.status==='done'?'on':''}" onclick="taskAction(this)">${w.status==='done'?'Completed':'Mark done'}</button>` : ''}
+            </div>`).join('')}
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+function taskAction(btn){
+  if(btn.classList.contains('on')) return;
+  btn.classList.add('on'); btn.textContent='Completed';
+  showToast('Task marked complete — skill profile updating');
+}
+
+function pagePractice(){
+  return `
+  <div class="grid g4" style="margin-bottom:6px;">
+    ${['Arrays','Strings','Linked Lists','Trees','Graphs','Dynamic Programming','Sorting','Searching','SQL'].map(t=>`<span class="tag" style="padding:6px 10px;">${t}</span>`).join('')}
+  </div>
+  <p class="card-sub" style="margin:14px 0;">${state.problems.length} sample problems seeded for this MVP · tap a problem to open the editor</p>
+  <div id="prob-list">
+    ${state.problems.map(p=>`
+      <div class="prob-card" onclick="openProblem(${p.id})">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div><strong style="font-size:13.5px;">${p.title}</strong>
+            <div class="skill-meta">${p.topic}</div>
+          </div>
+          <span class="mono diff-${p.diff.toLowerCase()}" style="font-size:12px;">${p.diff}</span>
+        </div>
+      </div>`).join('')}
+  </div>
+  <div id="editor-panel"></div>`;
+}
+function openProblem(id){
+  const p = state.problems.find(x=>x.id===id);
+  const panel = document.getElementById('editor-panel');
+  panel.innerHTML = `
+  <div class="card" style="margin-top:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+      <div><p class="card-title">${p.title} <span class="mono diff-${p.diff.toLowerCase()}" style="font-size:11px;margin-left:6px;">${p.diff}</span></p>
+      <p class="card-sub">${p.desc}</p></div>
+      <select id="lang-select" class="btn-sm" style="cursor:pointer;">
+        <option>C++</option><option>Python</option><option>JavaScript</option>
+      </select>
+    </div>
+    <textarea id="code-area" class="mono" style="width:100%;height:160px;background:var(--bg-alt);border:1px solid var(--line);
+      border-radius:8px;color:var(--text);padding:12px;font-size:12.5px;resize:vertical;outline:none;"
+      placeholder="// Write your solution here...">// your solution
+</textarea>
+    <div style="display:flex;gap:10px;margin-top:10px;">
+      <button class="btn-sm on" onclick="runCode(${p.id})">▶ Run tests</button>
+      <button class="btn-sm" onclick="document.getElementById('editor-panel').innerHTML=''">Close</button>
+    </div>
+    <div id="run-result-${p.id}"></div>
+  </div>`;
+  panel.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function runCode(id){
+  const el = document.getElementById(`run-result-${id}`);
+  el.innerHTML = `<p class="skill-meta" style="margin-top:12px;">Running in sandboxed evaluator…</p>`;
+  setTimeout(()=>{
+    const passed = 3 + Math.floor(Math.random()*2), total = 4;
+    el.innerHTML = `
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+      <div style="display:flex;gap:18px;font-size:12.5px;">
+        <span>✅ Passed: <strong>${passed}/${total}</strong></span>
+        <span>⏱ Exec time: <strong class="mono">${(38+Math.random()*40).toFixed(0)}ms</strong></span>
+        <span>📈 Skill impact: <strong style="color:var(--signal);">+1.2%</strong></span>
+      </div>
+      <p style="font-size:13px;margin-top:10px;line-height:1.5;">
+        <strong>AI feedback:</strong> ${passed===total ? 'Clean solution — time complexity looks optimal for this pattern. Try the Hard variant next.' : 'Logic mostly correct, but one edge case (empty input) fails. Review your boundary condition before the loop.'}
+      </p>
+    </div>`;
+  }, 900);
+}
+
+function pageIntegrations(){
+  return `
+  <p class="card-sub" style="margin-top:0;">Demo connectors — designed so real platform APIs can be plugged in without changing the rest of the app.</p>
+  <div class="grid g2">
+    ${state.platforms.map(pl=>`
+      <div class="card">
+        <div class="connect-card" style="padding:0;">
+          <div>
+            <p class="card-title" style="margin-bottom:2px;">${pl.name}</p>
+            <span class="pill pill-demo">${pl.status}</span>
+            <div class="skill-meta" style="margin-top:6px;">Last synced ${pl.synced}</div>
+          </div>
+          <button class="btn-sm on" onclick="syncPlatform('${pl.name}')">↻ Sync</button>
+        </div>
+        <div class="grid g2" style="margin-top:14px;gap:8px;">
+          ${Object.entries(pl.stats).map(([k,v])=>`
+            <div style="background:var(--bg-alt);border-radius:8px;padding:8px 10px;">
+              <div class="skill-meta">${k}</div><div class="mono" style="font-size:14px;font-weight:600;">${v}</div>
+            </div>`).join('')}
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+function syncPlatform(name){ showToast(`${name} synced — Demo/Sandbox Data refreshed`); }
+
+function pageGithub(){
+  return `
+  ${state.githubProjects.map(g=>`
+    <div class="card" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div><p class="card-title">${g.name}</p><p class="card-sub">${g.desc}</p></div>
+        <div style="text-align:center;">
+          <div class="mono" style="font-size:22px;font-weight:600;">${g.quality}</div>
+          <div class="skill-meta">/100</div>
+        </div>
+      </div>
+      <div class="grid g4" style="margin:10px 0;">
+        ${Object.entries(g.breakdown).map(([k,v])=>`
+          <div><div class="skill-meta">${k}</div>
+          <div class="bar-track" style="margin-top:5px;"><div class="bar-fill" style="width:${v}%;"></div></div></div>`).join('')}
+      </div>
+      <p class="skill-meta" style="text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">AI Recommendations</p>
+      ${g.recs.map(r=>`<div style="font-size:13px;margin-bottom:5px;">→ ${r}</div>`).join('')}
+    </div>`).join('')}`;
+}
+
+function pageResume(){
+  return `
+  <div class="grid g2">
+    <div class="card">
+      <p class="card-title">Upload resume</p>
+      <p class="card-sub">PDF or DOCX · analyzed securely, never auto-edited</p>
+      <div class="drop-zone" onclick="analyzeResume()">📄 Drop file here or click to simulate upload</div>
+    </div>
+    <div class="card" id="resume-result">
+      <p class="card-title">Resume Score</p>
+      <p class="card-sub">Upload to generate an AI analysis</p>
+    </div>
+  </div>`;
+}
+function analyzeResume(){
+  showToast('Extracting & analyzing resume…');
+  setTimeout(()=>{
+    document.getElementById('resume-result').innerHTML = `
+      <p class="card-title">Resume Score</p>
+      <div style="display:flex;align-items:center;gap:16px;margin:10px 0 16px;">
+        <div class="gauge" style="width:90px;height:90px;">${gaugeSVG(81,90,8)}
+          <div class="gauge-center"><div class="gauge-num" style="font-size:20px;">81</div></div></div>
+        <div style="flex:1;">
+          ${[['ATS Compatibility',88],['Technical Skills',84],['Project Quality',80],['Achievements',66],['Keywords',77],['Clarity',85]].map(([k,v])=>`
+            <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px;"><span>${k}</span><span class="mono">${v}</span></div>`).join('')}
+        </div>
+      </div>
+      <div class="pill pill-mid" style="margin-bottom:10px;">SDE Role Match: 82%</div>
+      <p class="skill-meta" style="text-transform:uppercase;">Missing skills</p>
+      <p style="font-size:13px;">REST APIs, Unit Testing, System Design</p>
+      <p class="skill-meta" style="text-transform:uppercase;margin-top:10px;">Suggested improvements</p>
+      <p style="font-size:13px;line-height:1.6;">Quantify project impact (e.g. "reduced query time by 40%"), add a link to live GitHub repos, and move technical skills above education for ATS scanning.</p>`;
+  }, 1100);
+}
+
+function pageInterview(){ return `<div id="interview-root"></div>`; }
+function renderInterview(){
+  const root = document.getElementById('interview-root');
+  if(!state.interview.active){
+    root.innerHTML = `
+    <p class="card-sub" style="margin-top:0;">Choose an interview type. PlacementAI will ask questions, evaluate your answers, and generate a final report.</p>
+    <div class="grid g3">
+      ${Object.keys(interviewBank).map(t=>`
+        <div class="card" style="cursor:pointer;" onclick="startInterview('${t}')">
+          <p class="card-title">${t}</p>
+          <p class="card-sub">${interviewBank[t].length} questions · ~6 min</p>
+          <button class="btn-sm on">Start →</button>
+        </div>`).join('')}
+    </div>`;
+    return;
+  }
+  const {type,qIndex,answers} = state.interview;
+  const qs = interviewBank[type];
+  if(qIndex >= qs.length){
+    const scores = {overall:74, technical:78, comm:70, problem:76};
+    root.innerHTML = `
+    <div class="card">
+      <p class="card-title">Final Report — ${type}</p>
+      <div class="gauge" style="width:110px;height:110px;margin:10px 0;">${gaugeSVG(scores.overall,110,10,'var(--amber)')}
+        <div class="gauge-center"><div class="gauge-num" style="font-size:24px;">${scores.overall}</div><div class="gauge-sub">/100</div></div></div>
+      <div class="grid g3" style="margin:14px 0;">
+        <div><div class="skill-meta">Technical accuracy</div><div class="mono" style="font-size:18px;">${scores.technical}%</div></div>
+        <div><div class="skill-meta">Communication</div><div class="mono" style="font-size:18px;">${scores.comm}%</div></div>
+        <div><div class="skill-meta">Problem solving</div><div class="mono" style="font-size:18px;">${scores.problem}%</div></div>
+      </div>
+      <p class="skill-meta" style="text-transform:uppercase;">Strengths</p>
+      <p style="font-size:13px;">Clear structure in technical explanations; strong grasp of core concepts.</p>
+      <p class="skill-meta" style="text-transform:uppercase;margin-top:10px;">Weaknesses</p>
+      <p style="font-size:13px;">Answers ran long in places — practice concise, structured responses (STAR method).</p>
+      <button class="btn-sm on" style="margin-top:14px;" onclick="state.interview={active:false,type:null,qIndex:0,answers:[]}; renderInterview();">Done</button>
+    </div>`;
+    return;
+  }
+  root.innerHTML = `
+  <div class="card">
+    <div class="pill pill-demo mono" style="margin-bottom:12px;">${type} · Question ${qIndex+1} of ${qs.length}</div>
+    <p style="font-size:15px;font-weight:500;line-height:1.5;">${qs[qIndex]}</p>
+    <textarea id="interview-answer" style="width:100%;height:100px;margin-top:12px;background:var(--bg-alt);border:1px solid var(--line);
+      border-radius:8px;color:var(--text);padding:10px;font-size:13px;outline:none;" placeholder="Type your answer..."></textarea>
+    <button class="btn-sm on" style="margin-top:10px;" onclick="nextInterviewQ()">Submit answer →</button>
+  </div>`;
+}
+function startInterview(type){ state.interview = {active:true, type, qIndex:0, answers:[]}; renderInterview(); }
+function nextInterviewQ(){
+  const val = document.getElementById('interview-answer').value;
+  state.interview.answers.push(val);
+  state.interview.qIndex++;
+  renderInterview();
+}
+
+function pageCoach(){
+  return `
+  <div class="chat-window">
+    <div class="chat-msgs" id="chat-msgs">
+      ${state.chat.map(m=>`<div class="msg ${m.who}">${m.text}</div>`).join('')}
+    </div>
+    <div class="chat-input-row">
+      <input id="chat-input" type="text" placeholder="Ask PlacementAI anything about your prep…" onkeydown="if(event.key==='Enter') sendChat()">
+      <button class="btn-sm on" onclick="sendChat()">Send</button>
+    </div>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+    ${['What should I learn today?','Why am I weak in DBMS?','Which role suits me?','How is my GitHub activity?'].map(q=>`
+      <button class="btn-sm" onclick="document.getElementById('chat-input').value='${q}'; sendChat();">${q}</button>`).join('')}
+  </div>`;
+}
+function coachReply(q){
+  const s = state.student, low = q.toLowerCase();
+  if(low.includes('what should i learn') || low.includes('today')) return "Based on your roadmap, focus on Week 2: Linked Lists + Stacks. Solve 3 linked-list problems and revise stack-based expression evaluation. Also queued: 5 SQL problems to shore up DBMS.";
+  if(low.includes('dbms')) return "Your last DBMS assessment scored 58%, with most incorrect answers on normalization and transactions. I've queued a normalization refresher and a retake assessment in Week 3 of your roadmap.";
+  if(low.includes('role') || low.includes('suit')) return `Based on your current skills (strong DSA & C++, developing web/DBMS), Software Development is your strongest match, followed by Full Stack Developer. Your target role "${s.role}" aligns well.`;
+  if(low.includes('github')) return "You have 8 repos and 140 contributions — solid activity. Your top project (campus-connect) scores 82/100; adding a proper README with screenshots would push it past 88.";
+  if(low.includes('ready') || low.includes('placement')) return `Your placement readiness is ${s.readiness}/100, up from ${s.prevReadiness} last week. DBMS and communication are your biggest levers right now.`;
+  return "Good question — based on your profile, I'd suggest checking your AI Roadmap for the next recommended task, or ask me about a specific skill like DBMS, DSA, or your resume.";
+}
+async function sendChat(){
+  const input = document.getElementById('chat-input');
+  const val = input.value.trim();
+  if(!val) return;
+  state.chat.push({who:'user', text:val});
+  input.value='';
+  const box = document.getElementById('chat-msgs');
+  const paint = ()=>{ box.innerHTML = state.chat.map(m=>`<div class="msg ${m.who}">${m.text}</div>`).join(''); box.scrollTop = box.scrollHeight; };
+  state.chat.push({who:'ai', text:'<span class="mono" style="color:var(--muted)">thinking…</span>'});
+  paint();
+  const history = state.chat.slice(0,-1).map(m=>({role: m.who==='user'?'user':'assistant', content: String(m.text).replace(/<[^>]*>/g,'')}));
+  try{
+    const res = await fetch('/api/chat', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ messages: history })
+    });
+    const data = await res.json().catch(()=>({}));
+    if(!res.ok) throw new Error(data.error || ('Assistant unavailable ('+res.status+')'));
+    state.chat[state.chat.length-1] = {who:'ai', text: (data.reply || 'No response received.')};
+  }catch(err){
+    state.chat[state.chat.length-1] = {who:'ai', text: 'AI assistant error: ' + (err && err.message ? err.message : 'unknown error')};
+  }
+  paint();
+}
+
+function pageOpportunities(){
+  return `
+  <p class="card-sub" style="margin-top:0;">Seeded sample opportunities — clearly marked as demo data. AI match % based on your current skill profile.</p>
+  ${state.opportunities.map(o=>`
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <p class="card-title">${o.title} <span class="skill-meta">· ${o.org}</span></p>
+          <div style="margin:6px 0;">${o.skills.map(s=>`<span class="tag">${s}</span>`).join('')}</div>
+          <p class="skill-meta">${o.type} · ${o.loc} · Deadline ${o.deadline}</p>
+        </div>
+        <div style="text-align:right;">
+          <div class="pill ${o.match>=85?'pill-strong':o.match>=70?'pill-mid':'pill-weak'} mono">${o.match}% Match</div>
+        </div>
+      </div>
+    </div>`).join('')}`;
+}
+
+function pageSIH(){
+  return `
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;" id="sih-filters">
+    ${['All','AI/ML','Web','IoT','Healthcare','Education','Agriculture','Cybersecurity','Smart Cities'].map(c=>`
+      <button class="btn-sm ${c==='All'?'on':''}" onclick="filterSIH('${c}',this)">${c}</button>`).join('')}
+  </div>
+  <div id="sih-list">${sihRows(state.sihStatements)}</div>`;
+}
+function sihRows(list){
+  return list.map(s=>`
+    <div class="card" style="margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div><span class="mono skill-meta">${s.id}</span>
+          <p class="card-title" style="margin:2px 0;">${s.title}</p>
+          <span class="tag">${s.cat}</span></div>
+        <div class="pill ${s.match>=85?'pill-strong':s.match>=60?'pill-mid':'pill-weak'} mono">${s.match}% fit</div>
+      </div>
+    </div>`).join('') || `<p class="skill-meta">No problem statements in this category.</p>`;
+}
+function filterSIH(cat, btn){
+  document.querySelectorAll('#sih-filters .btn-sm').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  const list = cat==='All' ? state.sihStatements : state.sihStatements.filter(s=>s.cat===cat);
+  document.getElementById('sih-list').innerHTML = sihRows(list);
+}
+
+function pageResources(){
+  return `
+  <div class="grid g2">
+    ${state.resources.map((r,i)=>`
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;">
+          <p class="card-title">${r.title}</p>
+          <span onclick="toggleBookmark(${i}, this)" style="cursor:pointer;color:${state.bookmarks.has(i)?'var(--amber)':'var(--muted-2)'};">★</span>
+        </div>
+        <div style="margin:6px 0;"><span class="tag">${r.topic}</span><span class="tag">${r.diff}</span><span class="tag">${r.time}</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);">
+          <span>★ ${r.rating}</span><span>AI relevance: <strong class="mono" style="color:var(--signal);">${r.relevance}%</strong></span>
+        </div>
+      </div>`).join('')}
+  </div>`;
+}
+function toggleBookmark(i, el){
+  if(state.bookmarks.has(i)){ state.bookmarks.delete(i); el.style.color='var(--muted-2)'; }
+  else{ state.bookmarks.add(i); el.style.color='var(--amber)'; showToast('Bookmarked'); }
+}
+
+function pageFeedback(){
+  const items = [
+    ['DSA','Improve Dynamic Programming fundamentals — 3 of your last 5 attempts stalled on recurrence relations.'],
+    ['Resume','Add measurable achievements (e.g. quantify performance improvements in projects).'],
+    ['GitHub','Improve README documentation on campus-connect — currently your weakest sub-score.'],
+    ['Interview','Give more structured answers using the STAR method in behavioral questions.'],
+    ['Assessment','DBMS normalization needs a full revision pass before the Week 3 retake.'],
+  ];
+  return `<div class="card"><p class="card-title">Latest AI Feedback</p>
+    ${items.map(([k,v])=>`
+      <div class="skill-row"><div><div class="skill-name">${k}</div><div class="skill-meta">${v}</div></div></div>`).join('')}
+  </div>`;
+}
+
+function pageWeekly(){
+  const w = state.weekly;
+  return `
+  <div class="grid g3" style="margin-bottom:16px;">
+    ${statCard('Problems Solved','24','this week','up')}
+    ${statCard('Study Time','8.5 hrs','vs 6.2 hrs last week','up')}
+    ${statCard('Readiness Change','+6 pts','72 → 78','up')}
+  </div>
+  <div class="grid g2">
+    <div class="card">
+      <p class="card-title">Skills improved</p>
+      ${w.improved.map(x=>`<div class="skill-row"><span>${x.s}</span><span class="mono up">+${x.v}%</span></div>`).join('')}
+      <p class="card-title" style="margin-top:16px;">Weak areas</p>
+      ${w.weak.map(x=>`<div style="font-size:13px;margin-bottom:6px;color:var(--amber);">▲ ${x}</div>`).join('')}
+    </div>
+    <div class="card">
+      <p class="card-title">Next week's priority</p>
+      ${w.priority.map((p,i)=>`<div class="skill-row"><span>${i+1}. ${p}</span></div>`).join('')}
+    </div>
+  </div>`;
+}
+
+function pageSettings(){
+  const s = state.student;
+  return `
+  <div class="card" style="max-width:520px;">
+    <p class="card-title">Profile</p>
+    <div class="field"><label>Name</label><input value="${s.name}"></div>
+    <div class="field"><label>College</label><input value="${s.college}"></div>
+    <div class="field"><label>Department</label><input value="${s.dept}"></div>
+    <div class="field"><label>Target Role</label><input value="${s.role}"></div>
+    <button class="btn-sm on" onclick="showToast('Profile saved (demo)')">Save changes</button>
+  </div>`;
+}
+
+/* init nav labels already bound via onclick */
+</script>
+</body>
+</html>
