@@ -1,24 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "PlacementAI — Placement Prep & Skill Development Platform" },
+      {
+        name: "description",
+        content:
+          "PlacementAI tracks placement readiness, closes skill gaps with an adaptive roadmap, and includes an AI placement coach for personalised prep guidance.",
+      },
+      { property: "og:title", content: "PlacementAI — Mission Control for Placement Readiness" },
+      {
+        property: "og:description",
+        content:
+          "Readiness scoring, skill-gap analysis, coding practice, mock interviews and an AI placement coach in one platform.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: Home,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
+function Home() {
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
+    <main className="h-screen w-screen overflow-hidden bg-background">
+      <h1 className="sr-only">
+        PlacementAI — smart placement preparation and skill development platform
+      </h1>
+      <iframe
+        src="/placementai.html"
+        title="PlacementAI platform"
+        className="h-full w-full border-0"
       />
-    </div>
+    </main>
   );
 }
